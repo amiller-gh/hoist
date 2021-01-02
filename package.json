@@ -13,6 +13,9 @@
   "bin": {
     "hoist": "./cli.js"
   },
+  "files": [
+    "cli.js", "dist"
+  ],
   "dependencies": {
     "@types/mime-db": "^1.43.0",
     "@types/mime-types": "^2.1.0",
