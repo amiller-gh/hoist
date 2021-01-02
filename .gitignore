@@ -62,3 +62,4 @@ typings/
 
 gcloud.json
 .DS_Store
+dist

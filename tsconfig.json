@@ -1,0 +1,45 @@
+{
+  "include": [ "./scripts" ],
+  "compilerOptions": {
+    "outDir": "dist",
+    "baseUrl": "dist",
+    "composite": true,
+    "lib": [ "ES2019", "DOM" ],
+
+    // JSX Settings for Preact
+    "jsx": "react",
+    "jsxFactory": "h",
+
+    // Compilation Configuration
+    "target": "ES2019",
+    "declaration": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    // Environment Configuration
+    "experimentalDecorators": true,
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+
+    // Enhance Strictness
+    "noImplicitAny": true,
+    "suppressImplicitAnyIndexErrors": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "strictNullChecks": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUnusedLocals": true,
+    "strictFunctionTypes": true,
+    "alwaysStrict": true,
+    "strictPropertyInitialization": true,
+
+    // output options
+    "preserveConstEnums": false,
+    "newLine": "LF",
+    "traceResolution": false,
+    "module": "commonjs",
+
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "@types/google-cloud-bucket",
+  "version": "1.0.0",
+  "types": "./types.d.ts"
+}
