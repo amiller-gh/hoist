@@ -1,6 +1,6 @@
 {
   "name": "@cannery/hoist",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DIY Static Website Hosting",
   "main": "dist/scripts/index.js",
   "types": "dist/scripts/index.d.ts",
@@ -14,11 +14,10 @@
     "hoist": "./cli.js"
   },
   "files": [
-    "cli.js", "dist"
+    "cli.js",
+    "dist"
   ],
   "dependencies": {
-    "@types/mime-db": "^1.43.0",
-    "@types/mime-types": "^2.1.0",
     "autoprefixer": "^10.1.0",
     "buffer-replace": "^1.0.0",
     "cli-progress": "^3.6.0",
@@ -41,6 +40,7 @@
     "node-gzip": "^1.1.2",
     "open": "^7.0.2",
     "postcss": "^8.2.1",
+    "syswide-cas": "^5.3.0",
     "terser": "^5.5.1",
     "tmp": "^0.2.1"
   },
@@ -57,6 +57,8 @@
     "@types/imagemin-gifsicle": "^7.0.0",
     "@types/imagemin-mozjpeg": "^8.0.0",
     "@types/imagemin-webp": "^5.1.1",
+    "@types/mime-db": "^1.43.0",
+    "@types/mime-types": "^2.1.0",
     "@types/node": "^14.14.19",
     "@types/node-gzip": "^1.1.0",
     "@types/tmp": "^0.2.0",

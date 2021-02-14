@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import * as https from 'https';
-import * as path from 'path';
 
 import * as devcert from 'devcert';
 import express from 'express';
@@ -15,7 +14,10 @@ export interface HoistServer {
   port: number;
   url: string;
   root: string;
-  isPublic(bool: boolean): boolean;
+  isPublic(): boolean;
+  isPrivate(): boolean;
+  makePublic(): boolean;
+  makePrivate(): boolean;
   stop(): Promise<void>;
 }
 
@@ -35,21 +37,14 @@ function setHeaders(res: express.Response, file: string) {
 }
 
 export async function serve(root: string, usrPort: string | null = null, autoOpen=true): Promise<HoistServer> {
-  console.log('SERVING', root, usrPort);
   const app = express();
   const settings = await getConfig(root);
 
   let isPublic = true;
-  app.use((req, res, next) => {
+  app.use((_req, res, next) => {
     if (!isPublic) {
       res.status(401).json({ status: 'error', code: 401, message: 'Unauthorized.'});
       return;
-    }
-
-    // Adjust for the current subdomain emulated.
-    if (process.env.HOIST_EMULATE) {
-      req.originalUrl = path.join(process.env.HOIST_EMULATE, req.originalUrl);
-      req.url = path.join(process.env.HOIST_EMULATE, req.url);
     }
 
     next();
@@ -87,16 +82,25 @@ export async function serve(root: string, usrPort: string | null = null, autoOpe
   app.use((req, _, next) => { req.originalUrl = req.originalUrl.slice(0, -3); req.url = req.url.slice(0, -3); next(); });
   const domain = settings.testDomain || settings['test_domain'] || 'hoist.test';
 
+  // If we don't have a dev certificate installed for this domain already, print a warning.
   if (!devcert.hasCertificateFor(domain)){
     console.log('Installing SSL Cert, This May Take a Moment');
   }
 
-  const ssl = await devcert.certificateFor(domain);
+  // Ensure we have a dev certificate installed for this domain.
+  const ssl = await devcert.certificateFor(domain, { getCaPath: true });
+
+  // If we want this Node.js process to request files via `https` or `Request` from this server, we need to add the Certificate Authority.
+  // https://stackoverflow.com/questions/29283040/how-to-add-custom-certificate-authority-ca-to-nodejs
+  require('syswide-cas').addCAs(ssl.caPath);
+
+  // Get a unique port if 443 is already taken and start the serer!
   const port = await getPort({ port: usrPort ? parseInt(usrPort) : 443 });
   const url = `https://${domain}${port === 443 ? '' : `:${port}`}`;
-  const server = https.createServer(ssl, app).listen(port, () => console.log(`Static site serving on port ${port}!`));
+  const server = https.createServer(ssl, app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
   const terminator = createHttpTerminator({ server });
 
+  // Auto open the page if requested.
   if (autoOpen) {
     await open(`${url}${typeof autoOpen === 'string' ? autoOpen : ''}`);
   }
@@ -105,7 +109,10 @@ export async function serve(root: string, usrPort: string | null = null, autoOpe
     url,
     port,
     root,
-    isPublic: (bool: boolean) => isPublic = bool,
+    isPublic: () => isPublic,
+    isPrivate: () => !isPublic,
+    makePublic: () => isPublic = true,
+    makePrivate: () => isPublic = false,
     stop: () => terminator.terminate(),
   };
 }

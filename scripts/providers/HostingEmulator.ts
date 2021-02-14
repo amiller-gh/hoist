@@ -19,8 +19,8 @@ export class HostingEmulator extends HostingProvider<IConfig> {
     this.server = await serve(path.join(this.dir.name), '443', false);
     return this;
   }
-  async makePublic() { this.server?.isPublic(true); return; }
-  async makePrivate() { this.server?.isPublic(false); return; }
+  async makePublic() { this.server?.makePublic(); return; }
+  async makePrivate() { this.server?.makePrivate(); return; }
   async get<T extends any>(name: string) {
     const paths = await glob(path.join(this.dir.name, name, '*'))
     if (paths.length === 0) { throw new Error('File Not Found.'); }
