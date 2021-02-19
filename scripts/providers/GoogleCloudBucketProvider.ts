@@ -57,7 +57,7 @@ export class GoogleCloudBucketProvider extends HostingProvider<IConfig> {
 
   async makePublic() { await this.bucket.addPublicAccess(); }
   async makePrivate() { await this.bucket.removePublicAccess(); }
-  async get<T extends any>(name: string) {
+  async get<T extends any>(name: string): Promise<T> {
     return this.client.get<T>(name, { timeout: 520000 });
   }
   async list(name: string) {
@@ -75,5 +75,4 @@ export class GoogleCloudBucketProvider extends HostingProvider<IConfig> {
     });
     return googleObjectToFileDesc(res);
   }
-
 }
