@@ -43,7 +43,7 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
   const domain = url.hostname;
 
   // Get a unique port if the user specified, or default port for the protocol is taken.
-  const port = `${await getPort({ port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80) })}`;
+  const port = url.port = `${await getPort({ port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80) })}`;
 
   let isPublic = true;
   app.use((_req, res, next) => {
@@ -99,7 +99,6 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
   require('syswide-cas').addCAs(ssl.caPath);
 
   // Start the server!
-  console.log('spinning up', url.toString(), root);
   const server = url.protocol === 'https:'
     ? https.createServer(ssl, app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`))
     : http.createServer(app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
