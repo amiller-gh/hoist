@@ -18,5 +18,5 @@ else if (args[0] === 'serve') {
   if (!dir) {
     return console.error('Directory required.');
   }
-  require('./dist/scripts/serve').serve(dir, args[2]);
+  require('./dist/scripts/serve').serve(dir);
 }

@@ -214,6 +214,9 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     const oldNames = Object.keys(hashes).sort((a, b) => a.length > b.length ? -1 : 1);
     isCli && progress.start(entries.length, uploadCount + errorCount);
 
+    // If nothing to upload, exit early.
+    if (entries.length === 0) { return resolve(); }
+
     for (let [filePath, buffer] of entries) {
       const hash = hashes[filePath];
       const extname = path.posix.extname(filePath);

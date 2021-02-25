@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as https from 'https';
+import * as http from 'http';
 
 import * as devcert from 'devcert';
 import express from 'express';
@@ -11,9 +12,8 @@ import mime from 'mime-types';
 import { getConfig } from './getConfig';
 
 export interface HoistServer {
-  port: number;
-  url: string;
   root: string;
+  url: string;
   isPublic(): boolean;
   isPrivate(): boolean;
   makePublic(): boolean;
@@ -36,9 +36,14 @@ function setHeaders(res: express.Response, file: string) {
   }
 }
 
-export async function serve(root: string, usrPort: string | null = null, autoOpen=true): Promise<HoistServer> {
+export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
   const app = express();
   const settings = await getConfig(root);
+  const url = new URL(settings.testDomain || settings['test_domain'] || 'https://hoist.test');
+  const domain = url.hostname;
+
+  // Get a unique port if the user specified, or default port for the protocol is taken.
+  const port = `${await getPort({ port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80) })}`;
 
   let isPublic = true;
   app.use((_req, res, next) => {
@@ -80,7 +85,6 @@ export async function serve(root: string, usrPort: string | null = null, autoOpe
 
   // For logging purposes, set the request url back to normal if we didn't find anything.
   app.use((req, _, next) => { req.originalUrl = req.originalUrl.slice(0, -3); req.url = req.url.slice(0, -3); next(); });
-  const domain = settings.testDomain || settings['test_domain'] || 'hoist.test';
 
   // If we don't have a dev certificate installed for this domain already, print a warning.
   if (!devcert.hasCertificateFor(domain)){
@@ -94,21 +98,22 @@ export async function serve(root: string, usrPort: string | null = null, autoOpe
   // https://stackoverflow.com/questions/29283040/how-to-add-custom-certificate-authority-ca-to-nodejs
   require('syswide-cas').addCAs(ssl.caPath);
 
-  // Get a unique port if 443 is already taken and start the serer!
-  const port = await getPort({ port: usrPort ? parseInt(usrPort) : 443 });
-  const url = `https://${domain}${port === 443 ? '' : `:${port}`}`;
-  const server = https.createServer(ssl, app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
+  // Start the server!
+  console.log('spinning up', url.toString(), root);
+  const server = url.protocol === 'https:'
+    ? https.createServer(ssl, app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`))
+    : http.createServer(app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
+
   const terminator = createHttpTerminator({ server });
 
   // Auto open the page if requested.
   if (autoOpen) {
-    await open(`${url}${typeof autoOpen === 'string' ? autoOpen : ''}`);
+    await open(`${url}`);
   }
 
   return {
-    url,
-    port,
     root,
+    url: url.toString(),
     isPublic: () => isPublic,
     isPrivate: () => !isPublic,
     makePublic: () => isPublic = true,

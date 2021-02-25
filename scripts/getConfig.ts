@@ -28,7 +28,9 @@ export interface IConfig {
 }
 
 export async function getConfig(cwd: string): Promise<IConfig> {
-  if (process.env.HOIST_EMULATE) { return { bucket: process.env.HOIST_EMULATE, testDomain: process.env.HOIST_EMULATE } as IConfig; }
+  const url = new URL(process.env.HOIST_EMULATE || 'https://hoist.test');
+  const port = url.port || (url.protocol === 'https:' ? 443 : 80);
+  if (process.env.HOIST_EMULATE) { return { bucket: `${url.hostname}-${port}`, testDomain: process.env.HOIST_EMULATE } as IConfig; }
   const jsonKeyFile = await findUp(CONFIG_FILENAME, { cwd });
   if (!jsonKeyFile) {
     throw new Error('Error: No gcloud.json config file found.');
