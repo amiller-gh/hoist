@@ -16,8 +16,7 @@ export class HostingEmulator extends HostingProvider<IConfig> {
   private dir: tmp.DirResult = tmp.dirSync({ keep: false, unsafeCleanup: true, prefix: 'hoist' });
   private server: HoistServer | null = null;
   async init() {
-    const url = new URL(process.env.HOIST_EMULATE || 'https://hoist.test');
-    const hostingPath = path.join(this.dir.name, [url.hostname, url.port].filter(Boolean).join('-'));
+    const hostingPath = path.join(this.dir.name, this.auth.bucket);
     fs.mkdirSync(hostingPath, { recursive: true });
     this.server = await serve(hostingPath, false);
     return this;
