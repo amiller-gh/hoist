@@ -6,7 +6,7 @@ import * as devcert from 'devcert';
 import express from 'express';
 import { createHttpTerminator } from 'http-terminator';
 import open from 'open';
-import getPort from 'get-port';
+import { getPortPromise as getPort } from 'portfinder';
 import mime from 'mime-types';
 
 import { getConfig } from './getConfig';
@@ -86,28 +86,36 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
   // For logging purposes, set the request url back to normal if we didn't find anything.
   app.use((req, _, next) => { req.originalUrl = req.originalUrl.slice(0, -3); req.url = req.url.slice(0, -3); next(); });
 
-  // If we don't have a dev certificate installed for this domain already, print a warning.
-  if (!devcert.hasCertificateFor(domain)){
-    console.log('Installing SSL Cert, This May Take a Moment');
+  let server: http.Server | https.Server;
+
+  if (url.protocol === 'https:') {
+    // If we don't have a dev certificate installed for this domain already, print a warning.
+    if (!devcert.hasCertificateFor(domain)){
+      console.log('Installing SSL Cert, This May Take a Moment');
+    }
+
+    // Ensure we have a dev certificate installed for this domain.
+    const ssl = await devcert.certificateFor(domain, { getCaPath: true });
+
+    // If we want this Node.js process to request files via `https` or `Request` from this server, we need to add the Certificate Authority.
+    // https://stackoverflow.com/questions/29283040/how-to-add-custom-certificate-authority-ca-to-nodejs
+    require('syswide-cas').addCAs(ssl.caPath);
+
+    // Start the server!
+    server = https.createServer(ssl, app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
   }
 
-  // Ensure we have a dev certificate installed for this domain.
-  const ssl = await devcert.certificateFor(domain, { getCaPath: true });
+  else {
+    // Start the server!
+    server = http.createServer(app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));;
+  }
 
-  // If we want this Node.js process to request files via `https` or `Request` from this server, we need to add the Certificate Authority.
-  // https://stackoverflow.com/questions/29283040/how-to-add-custom-certificate-authority-ca-to-nodejs
-  require('syswide-cas').addCAs(ssl.caPath);
-
-  // Start the server!
-  const server = url.protocol === 'https:'
-    ? https.createServer(ssl, app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`))
-    : http.createServer(app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
 
   const terminator = createHttpTerminator({ server });
 
   // Auto open the page if requested.
   if (autoOpen) {
-    await open(`${url}`);
+    await open(url.toString());
   }
 
   return {
