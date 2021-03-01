@@ -9,6 +9,7 @@ import open from 'open';
 import { getPortPromise as getPort } from 'portfinder';
 import mime from 'mime-types';
 import * as hostile from 'hostile';
+import * as sudo from 'sudo-prompt';
 
 import { getConfig } from './getConfig';
 
@@ -116,7 +117,14 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
 
   else {
     // Ensure our test domain points to the loopback interface.
-    await new Promise((resolve) => hostile.set('127.0.0.1', url.hostname, resolve));
+    const lines = hostile.get(false);
+    let discovered = false;
+    for (const line of lines) {
+      discovered = discovered || line[1] === url.hostname;
+    }
+    if (!discovered) {
+      await new Promise((resolve) => sudo.exec(`hostile set 127.0.0.1 ${url.hostname}`, { name: 'Hoist' }, resolve));
+    }
 
     // Start the server!
     server = http.createServer(app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
