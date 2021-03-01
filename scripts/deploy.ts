@@ -102,7 +102,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
   const NOW = Date.now();
   const preserveFile = await findUp(HOIST_PRESERVE, { cwd: root }) || '';
   const config = await getConfig(root);
-  const BUCKET = (userBucket || config.bucket).toLowerCase();
+  const BUCKET = (process.env.HOIST_EMULATE ? config.bucket : (userBucket || config.bucket)).toLowerCase();
   const log = typeof logger !== 'boolean' ? logger : console;
   const isCli = logger === true;
   const hosting = await initBucket(config, BUCKET)
