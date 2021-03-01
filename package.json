@@ -1,6 +1,6 @@
 {
   "name": "@cannery/hoist",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "description": "DIY Static Website Hosting",
   "main": "dist/scripts/index.js",
   "types": "dist/scripts/index.d.ts",

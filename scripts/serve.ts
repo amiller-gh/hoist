@@ -96,7 +96,15 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
     }
 
     // Ensure we have a dev certificate installed for this domain.
-    const ssl = await devcert.certificateFor(domain, { getCaPath: true });
+    const devcertOptions: devcert.Options = {};
+    if (process.env.HOIST_WINDOWS_CERT_PASSWORD) {
+      devcertOptions.ui = {
+        getWindowsEncryptionPassword: async() => {
+          return process.env.HOIST_WINDOWS_CERT_PASSWORD as string;
+        }
+      } as devcert.Options["ui"];
+    }
+    const ssl = await devcert.certificateFor(domain, {...devcertOptions, ...{ getCaPath: true }}); // For Typescript...
 
     // If we want this Node.js process to request files via `https` or `Request` from this server, we need to add the Certificate Authority.
     // https://stackoverflow.com/questions/29283040/how-to-add-custom-certificate-authority-ca-to-nodejs
