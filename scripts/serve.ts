@@ -10,6 +10,7 @@ import { getPortPromise as getPort } from 'portfinder';
 import mime from 'mime-types';
 import * as hostile from 'hostile';
 import * as sudo from 'sudo-prompt';
+import isPortUsed from 'tcp-port-used';
 
 import { getConfig } from './getConfig';
 
@@ -45,7 +46,10 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
   const domain = url.hostname;
 
   // Get a unique port if the user specified, or default port for the protocol is taken.
-  const port = url.port = `${await getPort({ port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80) })}`;
+  let port = url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80);
+  port = (await isPortUsed.check(port)) ? await getPort({ port }) : port;
+  url.port = `${port}`;
+
 
   let isPublic = true;
   app.use((_req, res, next) => {
