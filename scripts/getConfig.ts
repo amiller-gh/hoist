@@ -7,6 +7,7 @@ export interface IConfig {
   type: string;
   cloudflare_token: string | undefined;
   bucket: string;
+  location: string;
   test_domain: string;
   testDomain: string;
 

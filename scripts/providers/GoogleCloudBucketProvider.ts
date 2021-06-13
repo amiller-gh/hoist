@@ -20,9 +20,11 @@ function googleObjectToFileDesc(o: GoogleBucketObject): FileDescriptor {
 export class GoogleCloudBucketProvider extends HostingProvider<IConfig> {
   private client: GoogleCloudClient;
   private bucket!: GoogleCloudBucket;
+  private config: IConfig;
 
   constructor(domain: string, auth: IConfig) {
     super(domain, auth);
+    this.config = auth;
     this.client = client.new({
       clientEmail: auth.client_email || auth.clientEmail,
       privateKey: auth.private_key || auth.privateKey,
@@ -34,7 +36,7 @@ export class GoogleCloudBucketProvider extends HostingProvider<IConfig> {
 
     if (!await this.client.exists(this.domain)) {
       console.log(`🕐 Creating bucket ${this.domain}.`);
-      await this.client.bucket(this.domain).create({ location: 'us-west1' });
+      await this.client.bucket(this.domain).create({ location: this.config.location || 'us-west2' });
     }
 
     // CONFIGURE CORS ON A BUCKET (warning: Your service account must have the 'roles/this.client.admin' role)

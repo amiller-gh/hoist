@@ -302,8 +302,8 @@ export async function deploy(root: string, directory = '', userBucket: string | 
             buffer = Buffer.from(res.css);
           }
 
-          // Minify and upload sourcemaps for JS resources.
-          if (extname === '.js') {
+          // Minify and upload sourcemaps for JS resources. Avoid minifying already minified files.
+          if (extname === '.js' && !filePath.includes('.min.js')) {
             const bareRemoteName = path.posix.format(remoteName);
             const res = await Terser.minify(buffer.toString(), {
               toplevel: true,
