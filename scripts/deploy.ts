@@ -146,9 +146,11 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     let globs: string[] = [];
     try { globs = fs.readFileSync(preserveFile, 'utf8').split(/\r\n|\r|\n/g) } catch(_) {};
     for (let globPath of globs) {
-      for (let filePath of await glob(path.join(preserveFile, '..', globPath))) {
-        if (fs.statSync(filePath).isDirectory()) { continue; }
-        preserve[filePath] = true;
+      const cwd = path.resolve(preserveFile, '..');
+      for (let filePath of await glob(globPath, { cwd } )) {
+        console.log(globPath, cwd, path.join(cwd, filePath));
+        if (fs.statSync(path.join(cwd, filePath)).isDirectory()) { continue; }
+        preserve[path.join(cwd, filePath)] = true;
       }
     }
   } catch(_err) {
