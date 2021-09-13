@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import * as https from 'https';
 import * as http from 'http';
 

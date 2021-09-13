@@ -1,3 +1,5 @@
+import { ISourceFile } from "../types";
+
 export interface FileDescriptor {
   name: string;
   createdAt: Date;
@@ -20,7 +22,13 @@ export interface IHeaders {
 export abstract class HostingProvider<AuthObject extends any> {
   public readonly domain: string;
   protected auth: AuthObject;
+
+  public files: Record<string, ISourceFile> = {};
+  public toDelete: Record<string, number> = {};
+  public fileCache: Set<string> = new Set();
+
   constructor(domain: string, auth: AuthObject) { this.domain = domain; this.auth = auth; };
+
   abstract init(): Promise<this>;
   abstract makePublic(): Promise<void>;
   abstract makePrivate(): Promise<void>;

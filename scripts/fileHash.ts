@@ -1,5 +1,13 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as path from 'path';
+
+const WELL_KNOWN = {
+  'favicon.ico': true,
+  'robots.txt': true,
+  'index.html': true,
+  '.well-known': true,
+}
 
 // https://tools.ietf.org/html/rfc4648#section-5
 function md5toMd5url(hash: string) {
@@ -38,4 +46,9 @@ export function hoistCacheName(fileName: string, buffer: string | Buffer) {
   let hash = crypto.createHash('md5');
   hash.update(Buffer.from(fileName + contentHash));
   return md5toMd5url(hash.digest('base64'));
+}
+
+export function shouldRewriteUrl(root: string, remoteName: path.FormatInputPathObject, preserve?: Record<string, boolean>) {
+  const filePath = path.posix.join(root, path.posix.format(remoteName));
+  return !WELL_KNOWN[remoteName.base || ''] && !preserve?.[filePath] && filePath.indexOf('.well-known') !== 0 && remoteName.ext !== '.json';
 }

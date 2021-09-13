@@ -4,74 +4,33 @@ import findUp from 'find-up';
 import { gzip } from 'node-gzip';
 import { promisify } from 'util';
 import globSync from 'glob';
-import replace from 'buffer-replace';
-import imageminMozjpeg from 'imagemin-mozjpeg';
-import imageminPngquant from 'imagemin-pngquant';
-import imageminGifsicle from 'imagemin-gifsicle';
-import imageminWebp from 'imagemin-webp';
 import postcss from 'postcss';
 import cssnano from 'cssnano';
 import autoprefixer from 'autoprefixer';
 import Terser from 'terser';
-import htmlMinifier from 'html-minifier';
 import cliProgress from 'cli-progress';
 import mime from 'mime-types';
 import mimeDb from 'mime-db';
 
 import initBucket from './initBucket'
-import { cdnFileName, hoistCacheName } from './fileHash';
+import { cdnFileName, hoistCacheName, shouldRewriteUrl } from './fileHash';
 import Processor from 'postcss/lib/processor';
-import type { IHeaders } from './providers/types';
+import type { HostingProvider, IHeaders } from './providers/types';
 import { getConfig } from './getConfig';
+import { IFileDescriptor, ISourceFile, HOIST_PRESERVE, CACHE_FILENAME, DELETE_FILENAME, SYSTEM_FILES, FileHandler } from './types';
+import { processImage } from './process/image';
+import { processHtml } from './process/html';
 
-const HOIST_PRESERVE = '.hoist-preserve';
-const DELETE_FILENAME = '.hoist-delete';
-const CACHE_FILENAME = '.hoist-cache';
-const CONFIG_FILENAME = 'gcloud.json';
-const SYSTEM_FILES = new Set([DELETE_FILENAME, CACHE_FILENAME, CONFIG_FILENAME, HOIST_PRESERVE]);
+const handlers: FileHandler[] = [
+  processImage,
+  processHtml,
+]
 
 const glob = promisify(globSync);
-
-interface IFileDescriptor {
-  filePath: string;
-  remoteName: string;
-  buffer: Buffer;
-  contentType: string;
-  contentEncoding: string | undefined;
-  cacheControl: string;
-  contentSize: number;
-}
-
-const WELL_KNOWN = {
-  'favicon.ico': true,
-  'robots.txt': true,
-  'index.html': true,
-  '.well-known': true,
-}
 
 const progress = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
 let preserve = {};
 
-async function generateWebp(file: string, input: Buffer, BUCKET: string, root: string) {
-  let remoteName = path.posix.parse(path.posix.join(BUCKET, file));
-  const shouldRewrite = shouldRewriteUrl(root, path.posix.parse(file));
-  remoteName.ext = '.webp';
-  const filePath = path.posix.format(remoteName)
-  const buffer = await imageminWebp({ quality: 75 })(input);
-  if (shouldRewrite) {
-    remoteName.base = cdnFileName(buffer);
-    remoteName.ext = '';
-  }
-  return {
-    filePath,
-    remoteName: path.posix.format(remoteName),
-    buffer,
-    contentType: 'image/webp',
-    contentEncoding: undefined,
-    cacheControl: 'public,max-age=31536000,immutable',
-    contentSize: Buffer.byteLength(buffer),
-  };
-}
 
 function generateSourceMapFile(filePath: string, remoteName: string, content: Buffer | string, BUCKET: string): IFileDescriptor {
   remoteName = path.posix.join(BUCKET, remoteName) + '.map';
@@ -87,15 +46,51 @@ function generateSourceMapFile(filePath: string, remoteName: string, content: Bu
   };
 }
 
-function shouldRewriteUrl(root: string, remoteName: path.FormatInputPathObject) {
-  const filePath = path.posix.join(root, path.posix.format(remoteName));
-  return !WELL_KNOWN[remoteName.base || ''] && !preserve[filePath] && filePath.indexOf('.well-known') !== 0 && remoteName.ext !== '.json';
-}
-
 export interface Logger {
   log: (...args: any) => void;
   error: (...args: any) => void;
   warn: (...args: any) => void;
+}
+
+enum UploadStatus {
+  NOOP,
+  SUCCESS,
+  ERROR,
+}
+
+async function upload(hosting: HostingProvider<any>, { remoteName, buffer, contentType, contentEncoding, cacheControl, contentSize }: IFileDescriptor, log: Logger, isCli = false) {
+  const headers: IHeaders = {
+    'Content-Type': contentType,
+    'Content-Encoding': contentEncoding,
+    'Cache-Control': cacheControl,
+    'x-content-size': contentSize || 0,
+  };
+
+  if (!headers['Content-Type']) { delete headers['Content-Type']; }
+  if (!headers['Content-Encoding']) { delete headers['Content-Encoding']; }
+  if (!headers['Cache-Control']) { delete headers['Cache-Control']; }
+
+  const hash = hoistCacheName(remoteName, buffer);
+
+  // Remove this item from our remote objects map so we don't delete if we cleanup.
+  delete hosting.toDelete[hash];
+
+  // Do nothing if the file is already on the server, in the correct location, and unchanged.
+  if (hosting.fileCache.has(hash)) {
+    isCli && progress.increment(1);
+    return UploadStatus.NOOP;
+  }
+  hosting.fileCache.add(hash);
+
+  // Upload it!
+  await hosting.upload(buffer, remoteName, headers).then(() => {
+    isCli && progress.increment(1);
+    return UploadStatus.SUCCESS;
+  }, (err: Error) => {
+    log.error(err.message);
+    isCli && progress.increment(1);
+    return UploadStatus.ERROR
+  });
 }
 
 export async function deploy(root: string, directory = '', userBucket: string | null = null, logger: Logger | boolean = false, autoDelete = false) {
@@ -105,43 +100,14 @@ export async function deploy(root: string, directory = '', userBucket: string | 
   const BUCKET = (process.env.HOIST_EMULATE ? config.bucket : (userBucket || config.bucket)).toLowerCase();
   const log = typeof logger !== 'boolean' ? logger : console;
   const isCli = logger === true;
-  const hosting = await initBucket(config, BUCKET)
-
-  let toDelete = {};
-  let fileCache = new Set();
-  try { toDelete = await hosting.get<Record<string, string>>(path.posix.join(BUCKET, DELETE_FILENAME)); } catch {}
-  try { fileCache = new Set(await hosting.get<string[]>(path.posix.join(BUCKET, CACHE_FILENAME))); } catch {}
-  toDelete = toDelete || {};
-  fileCache = fileCache && fileCache.size ? fileCache : new Set();
-
-  const remoteObjects = new Map();
-  for (let obj of await hosting.list(BUCKET) || []) {
-    if (SYSTEM_FILES.has(obj.name)) { continue; }
-
-    const remoteName = path.posix.join(BUCKET, obj.name);
-
-    // Skip tracking remote files that aren't in our target upload directory.
-    if (remoteName.indexOf(path.posix.join(BUCKET, directory)) !== 0) { continue; }
-
-    const cacheName = hoistCacheName(remoteName, obj.md5Hash);
-
-    toDelete[cacheName] = toDelete[cacheName] || NOW;
-
-    remoteObjects.set(remoteName, {
-      name: obj.name,
-      remoteName,
-      contentType: obj.contentType,
-      cacheHash: cacheName,
-    });
-  }
+  const hosting = await initBucket(config, directory, BUCKET)
 
   let iter = 0;
   const THREAD_COUNT = 12;
   const threads: Promise<void>[] = [];
   for (let i=0;i<THREAD_COUNT;i++) { threads.push(Promise.resolve()); }
 
-  const hashes: Record<string, string> = {};
-  const buffers: Record<string, Buffer> = {};
+  const files: Record<string, ISourceFile> = {};
   try {
     let globs: string[] = [];
     try { globs = fs.readFileSync(preserveFile, 'utf8').split(/\r\n|\r|\n/g) } catch(_) {};
@@ -158,69 +124,37 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     preserve = {};
   }
 
+  const posixRoot = path.posix.join(...root.split(path.sep));
+
   // Fetch all our file buffers and content hashes, excluding Hoist system files.
   // Use platform specific separator for filesystem access.
   // We normalize this to posix paths for web below.
   for (let filePath of await glob(path.join(root, directory, '**', '*'))) {
     if (fs.statSync(filePath).isDirectory()) { continue; }
     if (SYSTEM_FILES.has(path.basename(filePath))) { continue; }
+
     // Normalize the path on windows for web use.
     const posixPath = path.posix.join(...filePath.split(path.sep));
-    const posixRoot = path.posix.join(...root.split(path.sep));
     let file = path.posix.relative(posixRoot, posixPath);
-    buffers[file] = fs.readFileSync(filePath);
-    hashes[file] = cdnFileName(buffers[file]);
+    const buffer = fs.readFileSync(filePath);
+    files[file] = {
+      path: file,
+      buffer,
+      hash: cdnFileName(buffer),
+    };
   }
 
   let noopCount = 0;
   let uploadCount = 0;
   let errorCount = 0;
-  async function upload({ remoteName, buffer, contentType, contentEncoding, cacheControl, contentSize }: IFileDescriptor) {
-    const headers: IHeaders = {
-      'Content-Type': contentType,
-      'Content-Encoding': contentEncoding,
-      'Cache-Control': cacheControl,
-      'x-content-size': contentSize || 0,
-    };
 
-    if (!headers['Content-Type']) { delete headers['Content-Type']; }
-    if (!headers['Content-Encoding']) { delete headers['Content-Encoding']; }
-    if (!headers['Cache-Control']) { delete headers['Cache-Control']; }
-
-    const hash = hoistCacheName(remoteName, buffer);
-
-    // Remove this item from our remote objects map so we don't delete if we cleanup.
-    delete toDelete[hash];
-
-    // Do nothing if the file is already on the server, in the correct location, and unchanged.
-    if (fileCache.has(hash)) {
-      noopCount++;
-      isCli && progress.update(uploadCount + errorCount + noopCount);
-      return;
-    }
-    fileCache.add(hash);
-
-    // Upload it!
-    await hosting.upload(buffer, remoteName, headers).then(() => {
-      uploadCount++;
-      isCli && progress.update(uploadCount + errorCount + noopCount);
-    }, (err: Error) => {
-      log.error(err.message);
-      errorCount++;
-    });
-
-  }
-
-  const entries = Object.entries(buffers);
   await new Promise<void>((resolve) => {
-    const oldNames = Object.keys(hashes).sort((a, b) => a.length > b.length ? -1 : 1);
-    isCli && progress.start(entries.length, uploadCount + errorCount);
+    isCli && progress.start(Object.keys(files).length, uploadCount + errorCount);
 
-    // If nothing to upload, exit early.
-    if (entries.length === 0) { return resolve(); }
-
-    for (let [filePath, buffer] of entries) {
-      const hash = hashes[filePath];
+    for (let desc of Object.values(files)) {
+      const filePath = desc.path;
+      let buffer = desc.buffer;
+      const hash = files[filePath]?.hash;
       const extname = path.posix.extname(filePath);
       const contentType = mime.contentType(extname) || 'application/octet-stream';
       const compress = mimeDb[contentType]?.compressible || false;
@@ -236,34 +170,17 @@ export async function deploy(root: string, directory = '', userBucket: string | 
             cacheControl = 'public,max-age=0';
 
             // If an HTML file, but not the index.html, remove the `.html` for a bare URLs look in the browser.
-            if (shouldRewriteUrl(root, remoteName)) {
+            if (shouldRewriteUrl(root, remoteName, preserve)) {
               remoteName.base = remoteName.name;
               remoteName.ext = '';
             }
 
             // Minify HTML
-            buffer = Buffer.from(htmlMinifier.minify(buffer.toString(), {
-              caseSensitive: true,
-              collapseBooleanAttributes: true,
-              collapseInlineTagWhitespace: false,
-              continueOnParseError: true,
-              collapseWhitespace: true,
-              decodeEntities: true,
-              minifyCSS: true,
-              minifyJS: true,
-              quoteCharacter: `"`,
-              removeAttributeQuotes: true,
-              removeComments: true,
-              removeScriptTypeAttributes: true,
-              removeStyleLinkTypeAttributes: true,
-              sortAttributes: true,
-              sortClassName: true,
-              useShortDoctype: true,
-            }));
+            await processHtml(hosting, filePath, buffer, (file) => upload(hosting, file, log, isCli));
           }
 
           // Otherwise, if not a well known file, use the hash value as its name for CDN cache busting.
-          else if (shouldRewriteUrl(root, remoteName)) {
+          else if (shouldRewriteUrl(root, remoteName, preserve)) {
             remoteName.base = hash;
             remoteName.ext = '';
           }
@@ -271,23 +188,6 @@ export async function deploy(root: string, directory = '', userBucket: string | 
           // If we're not rewriting this URL to a hash, we need the cache to revalidate every time.
           else {
             cacheControl = 'public,max-age=0';
-          }
-
-          // Replace all Hash names in CSS and HTML files.
-          if (extname === '.css' || extname === '.html') {
-            for (let oldName of oldNames ) {
-              const hash = hashes[oldName];
-              let hashNameObj = path.posix.parse(oldName);
-              hashNameObj.base = hash;
-              hashNameObj.ext = '';
-              let hashName = path.posix.format(hashNameObj);
-              buffer = replace(buffer, `/${oldName}`, `/${hashName}`);
-              const relativePath = path.posix.relative(path.posix.dirname(filePath), oldName);
-              if (relativePath) {
-                buffer = replace(buffer, `./${relativePath}`, `/${hashName}`);
-                buffer = replace(buffer, relativePath, `/${hashName}`);
-              }
-            }
           }
 
           // Minify and upload sourcemaps for CSS resources.
@@ -299,8 +199,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
               map: { inline: false },
             });
             const sourceMap = generateSourceMapFile(filePath, bareRemoteName, res.map.toString(), BUCKET);
-            entries.push([sourceMap.filePath, sourceMap.buffer])
-            await upload(sourceMap);
+            await upload(hosting, sourceMap, log, isCli);
             buffer = Buffer.from(res.css);
           }
 
@@ -320,39 +219,22 @@ export async function deploy(root: string, directory = '', userBucket: string | 
 
             if (res.map) {
               const sourceMap = generateSourceMapFile(filePath, bareRemoteName, res.map as string, BUCKET);
-              entries.push([sourceMap.filePath, sourceMap.buffer])
-              await upload(sourceMap);
+              await upload(hosting, sourceMap, log, isCli);
             }
           }
 
           // If is an image, minify it.
           // If not an image, we gzip it.
-          let webp;
           let contentSize = 0;
           switch (extname) {
             // Minify JPEGs and make progressive. Generate webp.
+            // Minify PNGs. Generate webp.
+            // Minify GIFs.
             case '.jpg':
             case '.jpeg':
-              buffer = await imageminMozjpeg({ quality: 70 })(buffer);
-              contentSize = Buffer.byteLength(buffer);
-              webp = await generateWebp(filePath, buffer, BUCKET, root);
-              entries.push([webp.filePath, webp.buffer]);
-              await upload(webp);
-              break;
-
-            // Minify PNGs. Generate webp.
             case '.png':
-              buffer = await imageminPngquant({ quality: [.65, .80] })(buffer);
-              contentSize = Buffer.byteLength(buffer);
-              webp = await generateWebp(filePath, buffer, BUCKET, root);
-              entries.push([webp.filePath, webp.buffer]);
-              await upload(webp);
-              break;
-
-            // Minify GIFs.
             case '.gif':
-              buffer = await imageminGifsicle({ optimizationLevel: 3 })(buffer);
-              contentSize = Buffer.byteLength(buffer);
+              await processImage(hosting, filePath, buffer, (file) => upload(hosting, file, log, isCli));
               break;
 
             // If it is compressible, gzip the world!
@@ -369,7 +251,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
           }
 
           // We have successfully computed our remote name!
-          await upload({
+          await upload(hosting, {
             filePath,
             remoteName: path.posix.join(BUCKET, path.posix.format(remoteName)),
             buffer,
@@ -377,27 +259,27 @@ export async function deploy(root: string, directory = '', userBucket: string | 
             contentEncoding,
             cacheControl,
             contentSize,
-          });
+          }, log, isCli);
 
         } catch(err) {
           log.error(err);
         }
 
         // If this is the last to process, resolve.
-        if ((uploadCount + errorCount + noopCount) === entries.length) { resolve(); }
       });
       iter++;
     }
+
+    Promise.all(Object.values(threads)).then(() => resolve());
   });
 
   // If file has been marked for deletion over three days ago, remove it from the server.
   let deletedCount = 0;
   if (autoDelete) {
-    for (let [, obj] of remoteObjects) {
-      const hashedName = obj.cacheHash;
-      if (toDelete[hashedName] && toDelete[hashedName] < (NOW - (1000 * 60 * 60 * 24 * 3))) {
-        await hosting.delete(obj.name);
-        delete toDelete[hashedName];
+    for (let [name, deleteDate] of Object.entries(hosting.toDelete)) {
+      if (deleteDate < (NOW - (1000 * 60 * 60 * 24 * 3))) {
+        await hosting.delete(name);
+        delete hosting.toDelete[name];
         deletedCount++;
       }
     }
@@ -406,12 +288,12 @@ export async function deploy(root: string, directory = '', userBucket: string | 
   isCli && progress.stop();
   log.log(`✅ ${uploadCount} items uploaded.`);
   log.log(`⏺  ${noopCount} items already present.`);
-  log.log(`⌛ ${Object.keys(toDelete).length} items queued for deletion.`);
+  log.log(`⌛ ${Object.keys(hosting.toDelete).length} items queued for deletion.`);
   log.log(`🚫 ${deletedCount} items deleted.`);
   log.log(`❗ ${errorCount} items failed.`);
 
-  const fileCacheBuffer = Buffer.from(JSON.stringify([...fileCache], null, 2));
-  await upload({
+  const fileCacheBuffer = Buffer.from(JSON.stringify([...hosting.fileCache], null, 2));
+  await upload(hosting, {
     buffer: await gzip(fileCacheBuffer, { level: 8 }),
     filePath: CACHE_FILENAME,
     remoteName: path.posix.join(BUCKET, CACHE_FILENAME),
@@ -419,10 +301,10 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     contentEncoding: 'gzip',
     cacheControl: 'no-cache,no-store,max-age=0',
     contentSize: Buffer.byteLength(fileCacheBuffer),
-  });
+  }, log, isCli);
 
-  const toDeleteBuffer = Buffer.from(JSON.stringify(toDelete, null, 2));
-  await upload({
+  const toDeleteBuffer = Buffer.from(JSON.stringify(hosting.toDelete, null, 2));
+  await upload(hosting, {
     buffer: await gzip(toDeleteBuffer, { level: 8 }),
     filePath: DELETE_FILENAME,
     remoteName: path.posix.join(BUCKET, DELETE_FILENAME),
@@ -430,7 +312,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     contentEncoding: 'gzip',
     cacheControl: 'no-cache,no-store,max-age=0',
     contentSize: Buffer.byteLength(toDeleteBuffer),
-  });
+  }, log, isCli);
 
   // Return the URL where we just uploaded everything to.
   return `https://${BUCKET}`;
