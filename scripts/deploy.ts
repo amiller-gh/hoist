@@ -276,6 +276,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
           // Replace all Hash names in CSS and HTML files.
           if (extname === '.css' || extname === '.html') {
             for (let oldName of oldNames ) {
+              if (oldName.endsWith('.html') || oldName.endsWith('.json')) { continue; }
               const hash = hashes[oldName];
               let hashNameObj = path.posix.parse(oldName);
               hashNameObj.base = hash;
