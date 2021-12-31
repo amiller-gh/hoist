@@ -331,7 +331,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
             // Minify JPEGs and make progressive. Generate webp.
             case '.jpg':
             case '.jpeg':
-              buffer = await sharp(buffer).jpeg({ mozjpeg: true, quality: 70, progressive: true }).toBuffer();
+              buffer = await sharp(buffer).rotate().jpeg({ mozjpeg: true, quality: 70, progressive: true }).toBuffer();
               contentSize = Buffer.byteLength(buffer);
               webp = await generateWebp(filePath, buffer, BUCKET, root);
               entries.push([webp.filePath, webp.buffer]);
