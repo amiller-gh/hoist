@@ -5,10 +5,7 @@ import { gzip } from 'node-gzip';
 import { promisify } from 'util';
 import globSync from 'glob';
 import replace from 'buffer-replace';
-import imageminMozjpeg from 'imagemin-mozjpeg';
-import imageminPngquant from 'imagemin-pngquant';
-import imageminGifsicle from 'imagemin-gifsicle';
-import imageminWebp from 'imagemin-webp';
+import sharp from 'sharp';
 import postcss from 'postcss';
 import cssnano from 'cssnano';
 import autoprefixer from 'autoprefixer';
@@ -57,7 +54,7 @@ async function generateWebp(file: string, input: Buffer, BUCKET: string, root: s
   const shouldRewrite = shouldRewriteUrl(root, path.posix.parse(file));
   remoteName.ext = '.webp';
   const filePath = path.posix.format(remoteName)
-  const buffer = await imageminWebp({ quality: 75 })(input);
+  const buffer = await sharp(input).webp().toBuffer();
   if (shouldRewrite) {
     remoteName.base = cdnFileName(buffer);
     remoteName.ext = '';
@@ -334,7 +331,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
             // Minify JPEGs and make progressive. Generate webp.
             case '.jpg':
             case '.jpeg':
-              buffer = await imageminMozjpeg({ quality: 70 })(buffer);
+              buffer = await sharp(buffer).jpeg({ mozjpeg: true, quality: 70, progressive: true }).toBuffer();
               contentSize = Buffer.byteLength(buffer);
               webp = await generateWebp(filePath, buffer, BUCKET, root);
               entries.push([webp.filePath, webp.buffer]);
@@ -343,7 +340,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
 
             // Minify PNGs. Generate webp.
             case '.png':
-              buffer = await imageminPngquant({ quality: [.65, .80] })(buffer);
+              buffer = await sharp(buffer).png({ progressive: true, compressionLevel: 7 }).toBuffer();
               contentSize = Buffer.byteLength(buffer);
               webp = await generateWebp(filePath, buffer, BUCKET, root);
               entries.push([webp.filePath, webp.buffer]);
@@ -352,7 +349,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
 
             // Minify GIFs.
             case '.gif':
-              buffer = await imageminGifsicle({ optimizationLevel: 3 })(buffer);
+              // TODO: Minify GIFs
               contentSize = Buffer.byteLength(buffer);
               break;
 
