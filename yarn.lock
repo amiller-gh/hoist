@@ -25,7 +25,6 @@
 
 "@types/buffer-replace@link:types-local/buffer-replace":
   version "0.0.0"
-  uid ""
 
 "@types/clean-css@*":
   version "4.2.3"
@@ -121,7 +120,6 @@
 
 "@types/google-cloud-bucket@link:types-local/google-cloud-bucket":
   version "0.0.0"
-  uid ""
 
 "@types/hostile@^1.3.0":
   version "1.3.0"
@@ -141,34 +139,6 @@
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/@types/http-terminator/-/http-terminator-2.0.1.tgz#75fc363e32cb506ec191cc2bc2a9d04ed7204bf9"
   integrity sha512-lJNXa+BH+HCoutDKbPOoW51LcBmzh9WcFcbOQYqHsSp9C1jPuFxH6QD68HLtrueZs+GEdkmQorMP4f15/WBQOw==
-  dependencies:
-    "@types/node" "*"
-
-"@types/imagemin-gifsicle@^7.0.0":
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/@types/imagemin-gifsicle/-/imagemin-gifsicle-7.0.0.tgz#80cfc5f68b2bbce57c6a3b97556ffa861a649132"
-  integrity sha512-RVFQZhPm/6vLC8wDvzHa34ZDrJECqmDV4XBS99AEk2ObyV4pcLQwObGYlmBv6fi9AtRLHf8mnKGczIHtF77u7w==
-  dependencies:
-    "@types/imagemin" "*"
-
-"@types/imagemin-mozjpeg@^8.0.0":
-  version "8.0.0"
-  resolved "https://registry.yarnpkg.com/@types/imagemin-mozjpeg/-/imagemin-mozjpeg-8.0.0.tgz#6986c34734aa767d83672eeb519379a2d7ec8b16"
-  integrity sha512-sR2nEZOrlbgnmVgG+lXetZOvhgtctLe1hBfvySnPnxDd2pOon9mMPq7SHFI89VZT1AXvFgRs8w6X8ik8potpgA==
-  dependencies:
-    "@types/imagemin" "*"
-
-"@types/imagemin-webp@^5.1.1":
-  version "5.1.1"
-  resolved "https://registry.yarnpkg.com/@types/imagemin-webp/-/imagemin-webp-5.1.1.tgz#f20eadcd3afba5d2ee81e9a69f4f3fe3f8e50b32"
-  integrity sha512-uJEBtA0popDfnUE2XnmLPYqEQYzB2qqwNRXUC/rvV7Y0wVR1jweezwGifkEuu3JNhEnUV3ZlnjfrsrrepaiOrQ==
-  dependencies:
-    "@types/imagemin" "*"
-
-"@types/imagemin@*":
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/@types/imagemin/-/imagemin-7.0.0.tgz#cb99d719190ebe421015213733d656fac1f8af2e"
-  integrity sha512-BiNd5FazD5ZmJUYD9txsbrttL0P0welrb9yAPn6ykKK3kWufwFsxYqw5KdggfZQDjiNYwsBrX+Fwei0Xsw4oAw==
   dependencies:
     "@types/node" "*"
 
@@ -830,10 +800,10 @@ color@^4.0.1:
     color-convert "^2.0.1"
     color-string "^1.9.0"
 
-colorette@^1.2.1:
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/colorette/-/colorette-1.2.1.tgz#4d0b921325c14faf92633086a536db6e89564b1b"
-  integrity sha512-puCDz0CzydiSYOrnXpz/PKd69zRrribezjtE9yd4zvytoRc8+RY/KJPvtPFKZS3E3wP6neGyMe0vOTlHO5L3Pw==
+colorette@^1.2.1, colorette@^1.2.2:
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/colorette/-/colorette-1.4.0.tgz#5190fbb87276259a86ad700bff2c6d6faa3fca40"
+  integrity sha512-Y2oEozpomLn7Q3HFP7dpww7AtMJplbM9lGZP6RDfHqmbeRjiwRg4n6VM6j4KLmRke85uWEI7JqF17f3pqdRA0g==
 
 colors@^1.1.2:
   version "1.4.0"
@@ -2423,10 +2393,10 @@ nanoid@^2.1.0:
   resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-2.1.11.tgz#ec24b8a758d591561531b4176a01e3ab4f0f0280"
   integrity sha512-s/snB+WGm6uwi0WjsZdaVcuf3KJXlfGl2LcxgwkEwJF0D/BWzVWAZW/XY4bFaiR7s0Jk3FPvlnepg1H1b1UwlA==
 
-nanoid@^3.1.20:
-  version "3.1.20"
-  resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-3.1.20.tgz#badc263c6b1dcf14b71efaa85f6ab4c1d6cfc788"
-  integrity sha512-a1cQNyczgKbLX9jwbS/+d7W8fX/RfgYR7lVWwWOGIPNgK2m0MWvrGF6/m4kk6U3QcFMnZf3RIhL0v2Jgh/0Uxw==
+nanoid@^3.1.22:
+  version "3.1.30"
+  resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-3.1.30.tgz#63f93cc548d2a113dc5dfbc63bfa09e2b9b64362"
+  integrity sha512-zJpuPDwOv8D2zq2WRoMe1HsfZthVewpel9CAvTfc/2mBD1uUT/agc5f7GHGWXlYkFvi1mVxe4IjvP2HNrop7nQ==
 
 nanomatch@^1.2.9:
   version "1.2.13"
@@ -3035,7 +3005,7 @@ postcss-value-parser@^4.1.0:
   resolved "https://registry.yarnpkg.com/postcss-value-parser/-/postcss-value-parser-4.1.0.tgz#443f6a20ced6481a2bda4fa8532a6e55d789a2cb"
   integrity sha512-97DXOFbQJhk71ne5/Mt6cOu6yxsSfM0QGQyl0L25Gca4yGWEGJaig7l7gbCX623VqTBNGLRLaVUCnNkcedlRSQ==
 
-"postcss@5 - 7", postcss@7.x.x:
+"postcss@5 - 7", postcss@7.x.x, postcss@^7.0.0, postcss@^7.0.1, postcss@^7.0.27:
   version "7.0.35"
   resolved "https://registry.yarnpkg.com/postcss/-/postcss-7.0.35.tgz#d2be00b998f7f211d8a276974079f2e92b970e24"
   integrity sha512-3QT8bBJeX/S5zKTTjTCIjRF3If4avAT6kqxcASlTWEtAFCb9NH0OUxNDfgZSWdP5fJnBYCMEWkIFfWeugjzYMg==
@@ -3044,22 +3014,13 @@ postcss-value-parser@^4.1.0:
     source-map "^0.6.1"
     supports-color "^6.1.0"
 
-postcss@^7.0.0, postcss@^7.0.1, postcss@^7.0.27:
-  version "7.0.27"
-  resolved "https://registry.yarnpkg.com/postcss/-/postcss-7.0.27.tgz#cc67cdc6b0daa375105b7c424a85567345fc54d9"
-  integrity sha512-WuQETPMcW9Uf1/22HWUWP9lgsIC+KEHg2kozMflKjbeUtw9ujvFX6QmIfozaErDkmLWS9WEnEdEe6Uo9/BNTdQ==
-  dependencies:
-    chalk "^2.4.2"
-    source-map "^0.6.1"
-    supports-color "^6.1.0"
-
 postcss@^8.2.1:
-  version "8.2.1"
-  resolved "https://registry.yarnpkg.com/postcss/-/postcss-8.2.1.tgz#eabc5557c4558059b9d9e5b15bce7ffa9089c2a8"
-  integrity sha512-RhsqOOAQzTgh1UB/IZdca7F9WDb7SUCR2Vnv1x7DbvuuggQIpoDwjK+q0rzoPffhYvWNKX5JSwS4so4K3UC6vA==
+  version "8.2.10"
+  resolved "https://registry.yarnpkg.com/postcss/-/postcss-8.2.10.tgz#ca7a042aa8aff494b334d0ff3e9e77079f6f702b"
+  integrity sha512-b/h7CPV7QEdrqIxtAf2j31U5ef05uBDuvoXv6L51Q4rcS1jdlXAVKJv+atCFdUXYl9dyTHGyoMzIepwowRJjFw==
   dependencies:
-    colorette "^1.2.1"
-    nanoid "^3.1.20"
+    colorette "^1.2.2"
+    nanoid "^3.1.22"
     source-map "^0.6.1"
 
 prebuild-install@^7.0.0:
