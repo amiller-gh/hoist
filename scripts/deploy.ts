@@ -11,7 +11,6 @@ import cssnano from 'cssnano';
 import autoprefixer from 'autoprefixer';
 import Terser from 'terser';
 import htmlMinifier from 'html-minifier';
-import cliProgress from 'cli-progress';
 import mime from 'mime-types';
 import mimeDb from 'mime-db';
 
@@ -46,7 +45,6 @@ const WELL_KNOWN = {
   '.well-known': true,
 }
 
-const progress = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
 let preserve = {};
 
 async function generateWebp(file: string, input: Buffer, BUCKET: string, root: string) {
@@ -90,18 +88,17 @@ function shouldRewriteUrl(root: string, remoteName: path.FormatInputPathObject) 
 }
 
 export interface Logger {
-  log: (...args: any) => void;
+  info: (...args: any) => void;
   error: (...args: any) => void;
   warn: (...args: any) => void;
+  progress: (status: { value: number; total: number; }) => void;
 }
 
-export async function deploy(root: string, directory = '', userBucket: string | null = null, logger: Logger | boolean = false, autoDelete = false) {
+export async function deploy(root: string, directory = '', userBucket: string | null = null, log: Partial<Logger> | null = null, autoDelete = false) {
   const NOW = Date.now();
   const preserveFile = await findUp(HOIST_PRESERVE, { cwd: root }) || '';
   const config = await getConfig(root);
   const BUCKET = (process.env.HOIST_EMULATE ? config.bucket : (userBucket || config.bucket)).toLowerCase();
-  const log = typeof logger !== 'boolean' ? logger : console;
-  const isCli = logger === true;
   const hosting = await initBucket(config, BUCKET)
 
   let toDelete = {};
@@ -145,13 +142,12 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     for (let globPath of globs) {
       const cwd = path.resolve(preserveFile, '..');
       for (let filePath of await glob(globPath, { cwd } )) {
-        console.log(globPath, cwd, path.join(cwd, filePath));
         if (fs.statSync(path.join(cwd, filePath)).isDirectory()) { continue; }
         preserve[path.join(cwd, filePath)] = true;
       }
     }
   } catch(_err) {
-    log.error(_err)
+    log?.error?.(_err)
     preserve = {};
   }
 
@@ -192,7 +188,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     // Do nothing if the file is already on the server, in the correct location, and unchanged.
     if (fileCache.has(hash)) {
       noopCount++;
-      isCli && progress.update(uploadCount + errorCount + noopCount);
+      log?.progress?.({ value: uploadCount + errorCount + noopCount, total: entries.length })
       return;
     }
     fileCache.add(hash);
@@ -200,9 +196,9 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     // Upload it!
     await hosting.upload(buffer, remoteName, headers).then(() => {
       uploadCount++;
-      isCli && progress.update(uploadCount + errorCount + noopCount);
+      log?.progress?.({ value: uploadCount + errorCount + noopCount, total: entries.length })
     }, (err: Error) => {
-      log.error(err.message);
+      log?.error?.(err.message);
       errorCount++;
     });
 
@@ -211,7 +207,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
   const entries = Object.entries(buffers);
   await new Promise<void>((resolve) => {
     const oldNames = Object.keys(hashes).sort((a, b) => a.length > b.length ? -1 : 1);
-    isCli && progress.start(entries.length, uploadCount + errorCount);
+    log?.progress?.({ value: uploadCount + errorCount + noopCount, total: entries.length })
 
     // If nothing to upload, exit early.
     if (entries.length === 0) { return resolve(); }
@@ -378,7 +374,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
           });
 
         } catch(err) {
-          log.error(err);
+          log?.error?.(err);
         }
 
         // If this is the last to process, resolve.
@@ -401,12 +397,12 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     }
   }
 
-  isCli && progress.stop();
-  log.log(`✅ ${uploadCount} items uploaded.`);
-  log.log(`⏺  ${noopCount} items already present.`);
-  log.log(`⌛ ${Object.keys(toDelete).length} items queued for deletion.`);
-  log.log(`🚫 ${deletedCount} items deleted.`);
-  log.log(`❗ ${errorCount} items failed.`);
+  log?.progress?.({ value: entries.length, total: entries.length })
+  log?.info?.(`✅ ${uploadCount} items uploaded.`);
+  log?.info?.(`⏺  ${noopCount} items already present.`);
+  log?.info?.(`⌛ ${Object.keys(toDelete).length} items queued for deletion.`);
+  log?.info?.(`🚫 ${deletedCount} items deleted.`);
+  log?.info?.(`❗ ${errorCount} items failed.`);
 
   const fileCacheBuffer = Buffer.from(JSON.stringify([...fileCache], null, 2));
   await upload({
