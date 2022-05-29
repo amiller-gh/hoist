@@ -1,5 +1,6 @@
 import * as https from 'https';
 import * as http from 'http';
+import * as urlParser from 'url';
 
 import * as devcert from 'devcert';
 import express from 'express';
@@ -10,8 +11,10 @@ import mime from 'mime-types';
 import * as hostile from 'hostile';
 import * as sudo from 'sudo-prompt';
 import isPortUsed from 'tcp-port-used';
+import slasher from 'glob-slasher';
 
-import { getConfig } from './getConfig';
+import { getConfig, IRedirect, IRewrite } from './getConfig';
+import * as patterns from './patterns';
 
 export interface HoistServer {
   root: string;
@@ -38,6 +41,17 @@ function setHeaders(res: express.Response, file: string) {
   }
 }
 
+function matcher(url: string, queries: IRedirect[]): IRedirect | null;
+function matcher(url: string, queries: IRewrite[]): IRewrite | null;
+function matcher(url: string, queries: IRedirect[] | IRewrite[]): IRewrite | IRedirect | null  {
+  for (let i = 0; i < queries.length; i++) {
+    if (patterns.configMatcher(url, queries[i])) {
+      return queries[i];
+    }
+  }
+  return null;
+};
+
 export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
   const app = express();
   const settings = await getConfig(root);
@@ -60,8 +74,31 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
     next();
   });
 
+  app.use((req, res, next) => {
+    const pathname = urlParser.parse(req.url).pathname;
+    const match = pathname ? matcher(slasher(pathname), settings.rewrites) : false;
+    if (match) {
+      req.originalUrl = match.destination;
+      req.url = match.destination;
+      res.status(200);
+    }
+    next();
+  });
+
+  app.use((req, res, next) => {
+    const pathname = urlParser.parse(req.url).pathname;
+    const match = pathname ? matcher(slasher(pathname), settings.redirects) : false;
+    if (match) {
+      req.originalUrl = match.destination;
+      req.url = match.destination;
+      res.status(match.type || 301).redirect(match.destination);
+    }
+    next();
+  });
+
   app.use(express.static(root, {
     setHeaders,
+    redirect: false,
     extensions: [
       // Text Based Files
       // Check for local GZip and Brotli versions of these.
@@ -82,11 +119,11 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
 
   // Try Local GZip Files. Express.static will not try fallback extensions if a valid extension is present, so we force it to try.
   app.use((req, _, next) => { req.originalUrl += '.gz'; req.url += '.gz'; next(); });
-  app.use(express.static(root, { setHeaders }));
+  app.use(express.static(root, { setHeaders, redirect: false }));
 
   // Try Local Brotli Files. Express.static will not try fallback extensions if a valid extension is present, so we force it to try.
   app.use((req, _, next) => { req.originalUrl = req.originalUrl.slice(0, -3) + '.br'; req.url = req.url.slice(0, -3) + '.br'; next(); });
-  app.use(express.static(root, { setHeaders }));
+  app.use(express.static(root, { setHeaders, redirect: false }));
 
   // For logging purposes, set the request url back to normal if we didn't find anything.
   app.use((req, _, next) => { req.originalUrl = req.originalUrl.slice(0, -3); req.url = req.url.slice(0, -3); next(); });

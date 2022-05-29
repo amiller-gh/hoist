@@ -276,10 +276,17 @@ export async function deploy(root: string, directory = '', userBucket: string | 
               hashNameObj.ext = '';
               let hashName = path.posix.format(hashNameObj);
               buffer = replace(buffer, `/${oldName}`, `/${hashName}`);
+              buffer = replace(buffer, `(${oldName})`, `(/${hashName})`);
               const relativePath = path.posix.relative(path.posix.dirname(filePath), oldName);
               if (relativePath) {
-                buffer = replace(buffer, `./${relativePath}`, `/${hashName}`);
-                buffer = replace(buffer, relativePath, `/${hashName}`);
+                if (!relativePath.startsWith('.')) {
+                  buffer = replace(buffer, `./${relativePath}`, `/${hashName}`);
+                  buffer = replace(buffer, `/${relativePath}`, `/${hashName}`);
+                  buffer = replace(buffer, `(${relativePath})`, `(/${hashName})`);
+                }
+                else {
+                  buffer = replace(buffer, relativePath, `/${hashName}`);
+                }
               }
             }
           }
@@ -301,6 +308,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
           // Minify and upload sourcemaps for JS resources. Avoid minifying already minified files.
           if (extname === '.js' && !filePath.includes('.min.js')) {
             const bareRemoteName = path.posix.format(remoteName);
+            console.log(filePath);
             const res = await Terser.minify(buffer.toString(), {
               toplevel: true,
               ecma: 2017,
