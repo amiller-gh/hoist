@@ -47,18 +47,17 @@ export interface IConfig {
   auth_provider_x509_cert_url: string;
   client_x509_cert_url: string;
 
+  contentHash: boolean;
   rewrites: IRewrite[];
   redirects: IRedirect[];
 }
 
 type CustomPackageJson = PackageJson & { hoist?: IConfig };
 
+let configCache: Record<string, IConfig> = {};
 export async function getConfig(cwd: string): Promise<IConfig> {
-  if (process.env.HOIST_EMULATE) {
-    const url = new URL(process.env.HOIST_EMULATE || 'https://hoist.test');
-    const port = url.port || (url.protocol === 'https:' ? 443 : 80);
-    return { bucket: [url.hostname, port].filter(Boolean).join('-'), testDomain: process.env.HOIST_EMULATE } as IConfig;
-  }
+  if (configCache[cwd]) { return configCache[cwd]; }
+
   const jsonKeyFile = await findUp(CONFIG_FILENAME, { cwd });
   if (!jsonKeyFile) {
     throw new Error('Error: No gcloud.json config file found.');
@@ -73,5 +72,14 @@ export async function getConfig(cwd: string): Promise<IConfig> {
   config.bucket = config.bucket || packageJson?.hoist?.testDomain || (packageJson.homepage ? new URL(packageJson.homepage).hostname : '');
   config.rewrites = packageJson?.hoist?.rewrites || [];
   config.redirects = packageJson?.hoist?.redirects || [];
-  return config;
+  config.contentHash = packageJson?.hoist?.contentHash !== false;
+
+  if (process.env.HOIST_EMULATE) {
+    const url = new URL(process.env.HOIST_EMULATE || 'https://hoist.test');
+    const port = url.port || (url.protocol === 'https:' ? 443 : 80);
+    config.bucket = [url.hostname, port].filter(Boolean).join('-');
+    config.testDomain = process.env.HOIST_EMULATE;
+  }
+
+  return configCache[cwd] = config;
 }

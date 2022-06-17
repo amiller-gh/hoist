@@ -12,6 +12,7 @@ import * as hostile from 'hostile';
 import * as sudo from 'sudo-prompt';
 import isPortUsed from 'tcp-port-used';
 import slasher from 'glob-slasher';
+import ProxyServer, { createProxyServer } from 'http-proxy';
 
 import { getConfig, IRedirect, IRewrite } from './getConfig';
 import * as patterns from './patterns';
@@ -27,6 +28,7 @@ export interface HoistServer {
 }
 
 function setHeaders(res: express.Response, file: string) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
   if (file.endsWith('.br')) {
     res.setHeader('Content-Encoding', 'brotli');
     var type = mime.lookup(file.slice(0, -3));
@@ -52,17 +54,17 @@ function matcher(url: string, queries: IRedirect[] | IRewrite[]): IRewrite | IRe
   return null;
 };
 
-export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
+export async function serve(root: string, autoOpen=true, configRoot?: string): Promise<HoistServer> {
   const app = express();
-  const settings = await getConfig(root);
+  let settings = await getConfig(configRoot || root);
   const url = new URL(settings.testDomain || settings['test_domain'] || 'https://hoist.test');
   const domain = url.hostname;
+  let proxy: ProxyServer;
 
   // Get a unique port if the user specified, or default port for the protocol is taken.
   let port = url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80);
   port = (await isPortUsed.check(port)) ? await getPort({ port }) : port;
   url.port = `${port}`;
-
 
   let isPublic = true;
   app.use((_req, res, next) => {
@@ -78,9 +80,19 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
     const pathname = urlParser.parse(req.url).pathname;
     const match = pathname ? matcher(slasher(pathname), settings.rewrites) : false;
     if (match) {
-      req.originalUrl = match.destination;
-      req.url = match.destination;
-      res.status(200);
+      if (match.destination.startsWith('http://') || match.destination.startsWith('https://')) {
+        try {
+          proxy.web(req, res, { target: match.destination });
+        } catch(err) {
+          console.error(err);
+          throw err;
+        }
+      }
+      else {
+        req.originalUrl = match.destination;
+        req.url = match.destination;
+        res.status(200);
+      }
     }
     next();
   });
@@ -153,6 +165,10 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
 
     // Start the server!
     server = https.createServer(ssl, app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
+    proxy = createProxyServer({
+      secure: true,
+      ssl: { key: ssl.key, cert: ssl.cert },
+    });
   }
 
   else {
@@ -168,6 +184,7 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
 
     // Start the server!
     server = http.createServer(app).listen(port, () => console.log(`Static site "${root}" serving at ${url}!`));
+    proxy = createProxyServer({});
   }
 
 
@@ -185,6 +202,6 @@ export async function serve(root: string, autoOpen=true): Promise<HoistServer> {
     isPrivate: () => !isPublic,
     makePublic: () => isPublic = true,
     makePrivate: () => isPublic = false,
-    stop: () => terminator.terminate(),
+    stop: () => { proxy.close(); return terminator.terminate();  },
   };
 }

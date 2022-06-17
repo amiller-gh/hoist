@@ -49,7 +49,7 @@ let preserve = {};
 
 async function generateWebp(file: string, input: Buffer, BUCKET: string, root: string) {
   let remoteName = path.posix.parse(path.posix.join(BUCKET, file));
-  const shouldRewrite = shouldRewriteUrl(root, path.posix.parse(file));
+  const shouldRewrite = await shouldRewriteUrl(root, path.posix.parse(file));
   remoteName.ext = '.webp';
   const filePath = path.posix.format(remoteName)
   const buffer = await sharp(input).webp().toBuffer();
@@ -82,7 +82,9 @@ function generateSourceMapFile(filePath: string, remoteName: string, content: Bu
   };
 }
 
-function shouldRewriteUrl(root: string, remoteName: path.FormatInputPathObject) {
+async function shouldRewriteUrl(root: string, remoteName: path.FormatInputPathObject): Promise<boolean> {
+  const config = await getConfig(root);
+  if (config.contentHash === false) { return false; }
   const filePath = path.posix.join(root, path.posix.format(remoteName));
   return !WELL_KNOWN[remoteName.base || ''] && !preserve[filePath] && filePath.indexOf('.well-known') !== 0 && remoteName.ext !== '.json';
 }
@@ -94,40 +96,15 @@ export interface Logger {
   progress: (status: { value: number; total: number; }) => void;
 }
 
-export async function deploy(root: string, directory = '', userBucket: string | null = null, log: Partial<Logger> | null = null, autoDelete = false) {
-  const NOW = Date.now();
+export async function deploy(root: string, directory = '', userBucket: string | null = null, log: Partial<Logger> | null = null) {
   const preserveFile = await findUp(HOIST_PRESERVE, { cwd: root }) || '';
   const config = await getConfig(root);
   const BUCKET = (process.env.HOIST_EMULATE ? config.bucket : (userBucket || config.bucket)).toLowerCase();
   const hosting = await initBucket(config, BUCKET)
 
-  let toDelete = {};
   let fileCache = new Set();
-  try { toDelete = await hosting.get<Record<string, string>>(path.posix.join(BUCKET, DELETE_FILENAME)); } catch {}
   try { fileCache = new Set(await hosting.get<string[]>(path.posix.join(BUCKET, CACHE_FILENAME))); } catch {}
-  toDelete = toDelete || {};
   fileCache = fileCache && fileCache.size ? fileCache : new Set();
-
-  const remoteObjects = new Map();
-  for (let obj of await hosting.list(BUCKET) || []) {
-    if (SYSTEM_FILES.has(obj.name)) { continue; }
-
-    const remoteName = path.posix.join(BUCKET, obj.name);
-
-    // Skip tracking remote files that aren't in our target upload directory.
-    if (remoteName.indexOf(path.posix.join(BUCKET, directory)) !== 0) { continue; }
-
-    const cacheName = hoistCacheName(remoteName, obj.md5Hash);
-
-    toDelete[cacheName] = toDelete[cacheName] || NOW;
-
-    remoteObjects.set(remoteName, {
-      name: obj.name,
-      remoteName,
-      contentType: obj.contentType,
-      cacheHash: cacheName,
-    });
-  }
 
   let iter = 0;
   const THREAD_COUNT = 12;
@@ -162,7 +139,9 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     const posixRoot = path.posix.join(...root.split(path.sep));
     let file = path.posix.relative(posixRoot, posixPath);
     buffers[file] = fs.readFileSync(filePath);
-    hashes[file] = cdnFileName(buffers[file]);
+    if (await shouldRewriteUrl(root, path.parse(file))) {
+      hashes[file] = cdnFileName(buffers[file]);
+    }
   }
 
   let noopCount = 0;
@@ -182,9 +161,6 @@ export async function deploy(root: string, directory = '', userBucket: string | 
 
     const hash = hoistCacheName(remoteName, buffer);
 
-    // Remove this item from our remote objects map so we don't delete if we cleanup.
-    delete toDelete[hash];
-
     // Do nothing if the file is already on the server, in the correct location, and unchanged.
     if (fileCache.has(hash)) {
       noopCount++;
@@ -201,7 +177,6 @@ export async function deploy(root: string, directory = '', userBucket: string | 
       log?.error?.(err.message);
       errorCount++;
     });
-
   }
 
   const entries = Object.entries(buffers);
@@ -229,7 +204,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
             cacheControl = 'public,max-age=0';
 
             // If an HTML file, but not the index.html, remove the `.html` for a bare URLs look in the browser.
-            if (shouldRewriteUrl(root, remoteName)) {
+            if (remoteName.name !== 'index') {
               remoteName.base = remoteName.name;
               remoteName.ext = '';
             }
@@ -256,7 +231,7 @@ export async function deploy(root: string, directory = '', userBucket: string | 
           }
 
           // Otherwise, if not a well known file, use the hash value as its name for CDN cache busting.
-          else if (shouldRewriteUrl(root, remoteName)) {
+          else if (await shouldRewriteUrl(root, remoteName)) {
             remoteName.base = hash;
             remoteName.ext = '';
           }
@@ -268,10 +243,10 @@ export async function deploy(root: string, directory = '', userBucket: string | 
 
           // Replace all Hash names in CSS and HTML files.
           if (extname === '.css' || extname === '.html') {
-            for (let oldName of oldNames ) {
+            for (let oldName of oldNames) {
+              let hashNameObj = path.posix.parse(oldName);
               if (oldName.endsWith('.html') || oldName.endsWith('.json')) { continue; }
               const hash = hashes[oldName];
-              let hashNameObj = path.posix.parse(oldName);
               hashNameObj.base = hash;
               hashNameObj.ext = '';
               let hashName = path.posix.format(hashNameObj);
@@ -308,7 +283,6 @@ export async function deploy(root: string, directory = '', userBucket: string | 
           // Minify and upload sourcemaps for JS resources. Avoid minifying already minified files.
           if (extname === '.js' && !filePath.includes('.min.js')) {
             const bareRemoteName = path.posix.format(remoteName);
-            console.log(filePath);
             const res = await Terser.minify(buffer.toString(), {
               toplevel: true,
               ecma: 2017,
@@ -392,24 +366,9 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     }
   });
 
-  // If file has been marked for deletion over three days ago, remove it from the server.
-  let deletedCount = 0;
-  if (autoDelete) {
-    for (let [, obj] of remoteObjects) {
-      const hashedName = obj.cacheHash;
-      if (toDelete[hashedName] && toDelete[hashedName] < (NOW - (1000 * 60 * 60 * 24 * 3))) {
-        await hosting.delete(obj.name);
-        delete toDelete[hashedName];
-        deletedCount++;
-      }
-    }
-  }
-
   log?.progress?.({ value: entries.length, total: entries.length })
   log?.info?.(`✅ ${uploadCount} items uploaded.`);
   log?.info?.(`⏺  ${noopCount} items already present.`);
-  log?.info?.(`⌛ ${Object.keys(toDelete).length} items queued for deletion.`);
-  log?.info?.(`🚫 ${deletedCount} items deleted.`);
   log?.info?.(`❗ ${errorCount} items failed.`);
 
   const fileCacheBuffer = Buffer.from(JSON.stringify([...fileCache], null, 2));
@@ -423,18 +382,6 @@ export async function deploy(root: string, directory = '', userBucket: string | 
     contentSize: Buffer.byteLength(fileCacheBuffer),
   });
 
-  const toDeleteBuffer = Buffer.from(JSON.stringify(toDelete, null, 2));
-  await upload({
-    buffer: await gzip(toDeleteBuffer, { level: 8 }),
-    filePath: DELETE_FILENAME,
-    remoteName: path.posix.join(BUCKET, DELETE_FILENAME),
-    contentType: 'application/json',
-    contentEncoding: 'gzip',
-    cacheControl: 'no-cache,no-store,max-age=0',
-    contentSize: Buffer.byteLength(toDeleteBuffer),
-  });
-
   // Return the URL where we just uploaded everything to.
   return `https://${BUCKET}`;
-
 }

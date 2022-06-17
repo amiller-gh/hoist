@@ -1,6 +1,6 @@
 {
   "name": "@cannery/hoist",
-  "version": "0.9.0",
+  "version": "0.11.1",
   "description": "DIY Static Website Hosting",
   "main": "dist/scripts/index.js",
   "types": "dist/scripts/index.d.ts",
@@ -18,6 +18,7 @@
     "dist"
   ],
   "dependencies": {
+    "@google-cloud/storage": "^6.0.1",
     "autoprefixer": "^10.4.7",
     "buffer-replace": "^1.0.0",
     "cli-progress": "^3.6.0",
@@ -29,9 +30,11 @@
     "fs-extra": "^9.0.1",
     "glob": "^7.1.6",
     "glob-slasher": "^1.0.1",
+    "google-auth-library": "^8.0.2",
     "google-cloud-bucket": "^1.0.0",
     "hostile": "^1.3.3",
     "html-minifier": "^4.0.0",
+    "http-proxy": "^1.18.1",
     "http-terminator": "^2.0.3",
     "mime-types": "^2.1.28",
     "node-gzip": "^1.1.2",
@@ -53,6 +56,7 @@
     "@types/google-cloud-bucket": "link:types-local/google-cloud-bucket",
     "@types/hostile": "^1.3.0",
     "@types/html-minifier": "^4.0.0",
+    "@types/http-proxy": "^1.17.9",
     "@types/http-terminator": "^2.0.1",
     "@types/mime-db": "^1.43.0",
     "@types/mime-types": "^2.1.0",

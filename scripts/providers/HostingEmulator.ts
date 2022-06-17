@@ -18,7 +18,8 @@ export class HostingEmulator extends HostingProvider<IConfig> {
   async init() {
     const hostingPath = path.join(this.dir.name, this.auth.bucket);
     fs.mkdirSync(hostingPath, { recursive: true });
-    this.server = await serve(hostingPath, false);
+    fs.writeFileSync(path.join(hostingPath, 'gcloud.json'), JSON.stringify(this.auth, null, 2));
+    this.server = await serve(hostingPath, false, process.cwd());
     return this;
   }
   async makePublic() { this.server?.makePublic(); return; }

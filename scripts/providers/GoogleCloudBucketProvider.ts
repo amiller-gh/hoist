@@ -1,6 +1,8 @@
 import { client, GoogleCloudClient, GoogleCloudBucket, GoogleBucketObject } from 'google-cloud-bucket';
-import { IConfig } from '../getConfig';
+// import { Storage } from '@google-cloud/storage';
+// import { auth as GoogleAuth } from 'google-auth-library';
 
+import { IConfig } from '../getConfig';
 import { FileDescriptor, HostingProvider, IHeaders } from './types';
 
 function googleObjectToFileDesc(o: GoogleBucketObject): FileDescriptor {
@@ -20,6 +22,7 @@ function googleObjectToFileDesc(o: GoogleBucketObject): FileDescriptor {
 export class GoogleCloudBucketProvider extends HostingProvider<IConfig> {
   private client: GoogleCloudClient;
   private bucket!: GoogleCloudBucket;
+  // private storage: Storage;
   private config: IConfig;
 
   constructor(domain: string, auth: IConfig) {
@@ -30,6 +33,7 @@ export class GoogleCloudBucketProvider extends HostingProvider<IConfig> {
       privateKey: auth.private_key || auth.privateKey,
       projectId: auth.projectId,
     });
+    // this.storage = new Storage({ projectId: auth.projectId, authClient: GoogleAuth.fromJSON(auth) });
   }
 
   async init() {
@@ -40,8 +44,14 @@ export class GoogleCloudBucketProvider extends HostingProvider<IConfig> {
     }
 
     // CONFIGURE CORS ON A BUCKET (warning: Your service account must have the 'roles/this.client.admin' role)
-    const bucket = this.bucket = this.client.bucket(this.domain);
+    // await this.storage.bucket(this.domain).setCorsConfiguration([{
+    //   origin: ['*'],
+    //   method: ['GET', 'OPTIONS', 'HEAD', 'POST'],
+    //   responseHeader: ['Authorization', 'Origin', 'X-Requested-With', 'Content-Type', 'Accept'],
+    //   maxAgeSeconds: 3600
+    // }]);
 
+    const bucket = this.bucket = this.client.bucket(this.domain);
     await bucket.cors.setup({
       origin: ['*'],
       method: ['GET', 'OPTIONS', 'HEAD', 'POST'],

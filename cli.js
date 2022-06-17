@@ -26,7 +26,9 @@ else if (args[0] === 'up') {
 
 else if (args[0] === 'serve') {
   if (!dir) {
-    return console.error('Directory required.');
+    console.error('Directory required.');
   }
-  require('./dist/scripts/serve').serve(dir);
+  else {
+    require('./dist/scripts/serve').serve(dir);
+  }
 }
